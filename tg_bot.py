@@ -1,6 +1,6 @@
 import logging
 
-from telegram import Update
+from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Updater, CallbackContext, CommandHandler, \
     MessageHandler, Filters
 from environs import Env
@@ -9,7 +9,10 @@ logger = logging.Logger(__file__)
 
 
 def start(update: Update, context: CallbackContext):
-    update.message.reply_text('Здравствуйте')
+    custom_keyboard = [['Новый вопрос', 'Сдаться'], ['Мой счёт']]
+    reply_markup = ReplyKeyboardMarkup(custom_keyboard)
+
+    update.message.reply_text('Здравствуйте', reply_markup=reply_markup)
 
 
 def echo(update: Update, context: CallbackContext):
