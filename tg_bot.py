@@ -1,9 +1,12 @@
 import logging
+from random import choice
 
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Updater, CallbackContext, CommandHandler, \
     MessageHandler, Filters
 from environs import Env
+
+from quiz import quiz_from_content
 
 logger = logging.Logger(__file__)
 
@@ -11,12 +14,19 @@ logger = logging.Logger(__file__)
 def start(update: Update, context: CallbackContext):
     custom_keyboard = [['Новый вопрос', 'Сдаться'], ['Мой счёт']]
     reply_markup = ReplyKeyboardMarkup(custom_keyboard)
+    text = 'Привет! Я бот для викторин'
+    update.message.reply_text(text, reply_markup=reply_markup)
 
-    update.message.reply_text('Здравствуйте', reply_markup=reply_markup)
+
+def get_random_question():
+    quiz = quiz_from_content()
+    random_question = choice(list(quiz.keys()))
+    return random_question
 
 
-def echo(update: Update, context: CallbackContext):
-    update.message.reply_text(update.message.text)
+def processing_messages(update: Update, context: CallbackContext):
+    if update.message.text == 'Новый вопрос':
+        update.message.reply_text(get_random_question())
 
 
 def main():
@@ -32,10 +42,12 @@ def main():
     dispatcher = updater.dispatcher
 
     start_handler = CommandHandler('start', start)
-    echo_handler = MessageHandler(Filters.text & (~Filters.command), echo)
+    message_handler = MessageHandler(
+        Filters.text & (~Filters.command),
+        processing_messages)
 
     dispatcher.add_handler(start_handler)
-    dispatcher.add_handler(echo_handler)
+    dispatcher.add_handler(message_handler)
 
     updater.start_polling()
 

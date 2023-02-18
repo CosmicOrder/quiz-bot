@@ -1,5 +1,12 @@
+from environs import Env
+
+
 def quiz_from_content():
-    with open('/home/igor/Документы/quiz-questions/har01v-1.txt',
+    env = Env()
+    env.read_env()
+
+    path_to_quiz = env('PATH_TO_QUIZ')
+    with open(path_to_quiz,
               'r',
               encoding='KOI8-R') as file:
         file_content = file.read()
