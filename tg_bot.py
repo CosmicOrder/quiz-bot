@@ -1,49 +1,61 @@
 import logging
 import textwrap
-from random import choice
 
 from environs import Env
 from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import Updater, CallbackContext, CommandHandler, \
-    MessageHandler, Filters
+from telegram.ext import Updater, CallbackContext, ConversationHandler, \
+    CommandHandler, MessageHandler, Filters
 
-from quiz import quiz_from_content
+from misc import get_random_question, get_right_answer
 from redis_connection import redis
 
 logger = logging.Logger(__file__)
+
+CHOOSING, SOLUTION_ATTEMPT = range(2)
 
 
 def start(update: Update, context: CallbackContext):
     custom_keyboard = [['Новый вопрос', 'Сдаться'], ['Мой счёт']]
     reply_markup = ReplyKeyboardMarkup(custom_keyboard)
     text = 'Привет! Я бот для викторин'
+
     context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=text,
         reply_markup=reply_markup)
+    return CHOOSING
 
 
-def get_random_question():
-    quiz = quiz_from_content()
-    random_question = choice(list(quiz.keys()))
-    return random_question
+def handle_new_question_request(update: Update, context: CallbackContext):
+    question_for_user = get_random_question()
+    update.message.reply_text(question_for_user)
+    redis.set(str(update.message.from_user.id), question_for_user)
+    return SOLUTION_ATTEMPT
 
 
-def processing_messages(update: Update, context: CallbackContext):
-    asked_question = redis.get(str(update.message.from_user.id))
-    right_answer = quiz_from_content().get(asked_question)[:-1]
-    print(right_answer)
-    if update.message.text == 'Новый вопрос':
-        question_for_user = get_random_question()
-        update.message.reply_text(question_for_user)
-        redis.set(str(update.message.from_user.id), question_for_user)
-    elif update.message.text.capitalize() == right_answer.capitalize():
+def handle_solution_attempt(update: Update, context: CallbackContext):
+    right_answer = get_right_answer(update)
+    if update.message.text.capitalize() == right_answer.capitalize():
         update.message.reply_text(textwrap.dedent('''
         Правильно! Поздравляю!
         Для следующего вопроса нажми "Новый вопрос"
         '''))
+        return CHOOSING
     else:
         update.message.reply_text('Неправильно... Попробуешь ещё раз?')
+
+
+def give_up(update: Update, context: CallbackContext):
+    update.message.reply_text(get_right_answer(update))
+
+    question_for_user = get_random_question()
+    update.message.reply_text(question_for_user)
+    redis.set(str(update.message.from_user.id), question_for_user)
+    return SOLUTION_ATTEMPT
+
+
+def cancel(update: Update, context: CallbackContext):
+    return -1
 
 
 def main():
@@ -58,13 +70,21 @@ def main():
 
     dispatcher = updater.dispatcher
 
-    start_handler = CommandHandler('start', start)
-    message_handler = MessageHandler(
-        Filters.text & (~Filters.command),
-        processing_messages)
-
-    dispatcher.add_handler(start_handler)
-    dispatcher.add_handler(message_handler)
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('start', start)],
+        states={
+            CHOOSING: [MessageHandler(Filters.regex('^Новый вопрос$'),
+                                      handle_new_question_request),
+                       ],
+            SOLUTION_ATTEMPT: [MessageHandler(Filters.regex('^Сдаться$'),
+                                              give_up),
+                               MessageHandler(Filters.text & (~Filters.command),
+                                              handle_solution_attempt),
+                               ]
+        },
+        fallbacks=[CommandHandler('cancel', cancel)]
+    )
+    dispatcher.add_handler(conv_handler)
 
     updater.start_polling()
 
