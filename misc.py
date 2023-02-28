@@ -10,6 +10,6 @@ def get_random_question():
     return random_question
 
 
-def get_right_answer(update):
-    asked_question = redis.get(str(update.message.from_user.id))
+def get_right_answer(user_id):
+    asked_question = redis.get(str(user_id))
     return quiz_from_content().get(asked_question)[:-1]

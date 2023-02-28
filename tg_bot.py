@@ -34,7 +34,7 @@ def handle_new_question_request(update: Update, context: CallbackContext):
 
 
 def handle_solution_attempt(update: Update, context: CallbackContext):
-    right_answer = get_right_answer(update)
+    right_answer = get_right_answer(update.message.from_user.id)
     if update.message.text.capitalize() == right_answer.capitalize():
         update.message.reply_text(textwrap.dedent('''
         Правильно! Поздравляю!
@@ -46,7 +46,7 @@ def handle_solution_attempt(update: Update, context: CallbackContext):
 
 
 def give_up(update: Update, context: CallbackContext):
-    update.message.reply_text(get_right_answer(update))
+    update.message.reply_text(get_right_answer(update.message.from_user.id))
 
     question_for_user = get_random_question()
     update.message.reply_text(question_for_user)
