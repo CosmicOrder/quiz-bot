@@ -46,7 +46,8 @@ def handle_solution_attempt(update: Update, context: CallbackContext):
 
 
 def give_up(update: Update, context: CallbackContext):
-    update.message.reply_text(get_right_answer(update.message.from_user.id))
+    right_answer = get_right_answer(update.message.from_user.id)
+    update.message.reply_text(f'Правильный ответ: {right_answer}')
 
     question_for_user = get_random_question()
     update.message.reply_text(question_for_user)
