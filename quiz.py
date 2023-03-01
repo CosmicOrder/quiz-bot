@@ -22,6 +22,3 @@ def quiz_from_content():
             answers.append(content[7:])
 
     return dict(zip(questions, answers))
-
-
-print(quiz_from_content())
