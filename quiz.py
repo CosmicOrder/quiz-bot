@@ -1,7 +1,7 @@
 from environs import Env
 
 
-def quiz_from_content():
+def make_quiz_from_content():
     env = Env()
     env.read_env()
 
