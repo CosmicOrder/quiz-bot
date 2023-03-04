@@ -1,12 +1,8 @@
 from environs import Env
 
 
-def make_quiz_from_content():
-    env = Env()
-    env.read_env()
-
-    path_to_quiz = env('PATH_TO_QUIZ')
-    with open(path_to_quiz,
+def make_quiz_from_content(path):
+    with open(path,
               'r',
               encoding='KOI8-R') as file:
         file_content = file.read()
@@ -22,3 +18,11 @@ def make_quiz_from_content():
             answers.append(content[7:])
 
     return dict(zip(questions, answers))
+
+
+if __name__ == '__main__':
+    env = Env()
+    env.read_env()
+
+    path_to_quiz = env('PATH_TO_QUIZ')
+    quiz = make_quiz_from_content(path_to_quiz)
