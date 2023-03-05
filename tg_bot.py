@@ -1,13 +1,15 @@
+import functools
 import logging
 import textwrap
+from random import choice
 
+from redis import Redis
 from environs import Env
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Updater, CallbackContext, ConversationHandler, \
     CommandHandler, MessageHandler, Filters
 
-from misc import get_random_question, get_right_answer
-from redis_connection import redis
+from quiz import make_quiz_from_content
 
 logger = logging.Logger(__file__)
 
@@ -26,15 +28,16 @@ def start(update: Update, context: CallbackContext):
     return CHOOSING
 
 
-def handle_new_question_request(update: Update, context: CallbackContext):
-    question_for_user = get_random_question()
+def handle_new_question_request(update, context, quiz, redis):
+    question_for_user = choice(list(quiz.keys()))
     update.message.reply_text(question_for_user)
     redis.set(str(update.message.from_user.id), question_for_user)
     return SOLUTION_ATTEMPT
 
 
-def handle_solution_attempt(update: Update, context: CallbackContext):
-    right_answer = get_right_answer(update.message.from_user.id)
+def handle_solution_attempt(update, context, quiz, redis):
+    asked_question = redis.get(str(update.message.from_user.id))
+    right_answer = quiz.get(asked_question)[:-1]
     if update.message.text.capitalize() == right_answer.capitalize():
         update.message.reply_text(textwrap.dedent('''
         Правильно! Поздравляю!
@@ -45,17 +48,18 @@ def handle_solution_attempt(update: Update, context: CallbackContext):
         update.message.reply_text('Неправильно... Попробуешь ещё раз?')
 
 
-def give_up(update: Update, context: CallbackContext):
-    right_answer = get_right_answer(update.message.from_user.id)
+def give_up(update, context, quiz, redis):
+    asked_question = redis.get(str(update.message.from_user.id))
+    right_answer = quiz.get(asked_question)[:-1]
     update.message.reply_text(f'Правильный ответ: {right_answer}')
 
-    question_for_user = get_random_question()
+    question_for_user = choice(list(quiz.keys()))
     update.message.reply_text(question_for_user)
     redis.set(str(update.message.from_user.id), question_for_user)
     return SOLUTION_ATTEMPT
 
 
-def cancel(update: Update, context: CallbackContext):
+def cancel(update, context):
     return -1
 
 
@@ -64,6 +68,22 @@ def main():
     env.read_env()
 
     quiz_tg_token = env('QUIZ_TG_TOKEN')
+    path_to_quiz = env('PATH_TO_QUIZ')
+    host = env('HOST')
+    port = env('PORT')
+    username = env('REDIS_USERNAME')
+    password = env('REDIS_PASSWD')
+
+    redis = Redis(
+        host=host,
+        port=port,
+        username=username,
+        password=password,
+        decode_responses=True,
+    )
+
+    quiz = make_quiz_from_content(path_to_quiz)
+
     logging.basicConfig(level=logging.ERROR)
     logger.setLevel(logging.DEBUG)
 
@@ -71,16 +91,33 @@ def main():
 
     dispatcher = updater.dispatcher
 
+    handle_new_question_request_partial = functools.partial(
+        handle_new_question_request,
+        redis=redis,
+        quiz=quiz,
+    )
+    handle_solution_attempt_partial = functools.partial(
+        handle_solution_attempt,
+        redis=redis,
+        quiz=quiz,
+    )
+    give_up_partial = functools.partial(
+        give_up,
+        redis=redis,
+        quiz=quiz,
+    )
+
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
             CHOOSING: [MessageHandler(Filters.regex('^Новый вопрос$'),
-                                      handle_new_question_request),
+                                      handle_new_question_request_partial),
                        ],
             SOLUTION_ATTEMPT: [MessageHandler(Filters.regex('^Сдаться$'),
-                                              give_up),
-                               MessageHandler(Filters.text & (~Filters.command),
-                                              handle_solution_attempt),
+                                              give_up_partial),
+                               MessageHandler(
+                                   Filters.text & (~Filters.command),
+                                   handle_solution_attempt_partial),
                                ]
         },
         fallbacks=[CommandHandler('cancel', cancel)]
